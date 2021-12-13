@@ -52,10 +52,14 @@ private:
   {
     if ( try_associativity( n ) )
       return true;
-    if ( try_distributivity( n ) )
+    if ( try_distributivity_or( n ) )
       return true;
     /* TODO: add more rules here... */
+    if ( try_distributivity_and( n ) )
+      return true;
 
+    if (try_TL_distributivity(n))
+      return true;
     return false;
   }
 
@@ -63,14 +67,235 @@ private:
   bool try_associativity( node n )
   {
     /* TODO */
-    return false;
+    if ( ntk.is_on_critical_path( n ) )
+    {
+      std::vector<node> children_n;
+      std::vector<signal> grandchildren, children_s;
+      signal and_low, and_high;
+      ntk.foreach_fanin( n, [&]( signal const& child )
+                         {
+                           children_n.emplace_back( ntk.get_node( child ) );
+                           children_s.emplace_back( child );
+                         } );
+      if ( ntk.level( children_n[0] ) > ntk.level( children_n[1] ) )
+      {
+        std::swap( children_s[0], children_s[1] );
+        std::swap( children_n[0], children_n[1] );
+      } //have child 1 be on crit path
+      if ( (ntk.level( children_n[0] ) == ntk.level( children_n[1] ) ) || ntk.is_complemented(children_s[1]))
+        return false; //check that children have different level and the one on crit path isn't a NAND
+      else
+      {
+        ntk.foreach_fanin( children_n[1], [&]( signal const& grandchild ) { 
+            grandchildren.emplace_back( grandchild );
+        } );
+        if ( ntk.level( ntk.get_node( grandchildren[0] ) ) > ntk.level(ntk.get_node(grandchildren[1])))
+        {
+          std::swap( grandchildren[0], grandchildren[1] );
+        } //have grandchild 1 be on crit path
+        if ( ntk.level( ntk.get_node( grandchildren[0] ) ) == ntk.level( ntk.get_node( grandchildren[1] ) ) )
+          return false; //check if grandchildren aren't on the same path
+        if ( ntk.level( children_n[0] ) < ntk.level( ntk.get_node( grandchildren[1] ) ) )
+        {
+          //child 1 on crit path, grandchild 1 on crit path =>
+          and_low = ntk.create_and( grandchildren[0], children_s[0] );
+          and_high = ntk.create_and( and_low, grandchildren[1] );
+          ntk.substitute_node( n, and_high );
+          return true;
+        }
+        else
+          return false;
+      }
+    }
+    else
+      return false;
   }
 
   /* Try the distributivity rule on node n. Return true if the network is updated. */
-  bool try_distributivity( node n )
+  bool try_distributivity_or( node n )
   {
+
     /* TODO */
-    return false;
+    if ( ntk.is_on_critical_path( n ) )
+    {
+      std::vector<node> children_n;
+      std::vector<signal> others, children_s;
+      signal and_low, and_high, shared_child;
+      bool found=false;
+      ntk.foreach_fanin( n, [&]( signal const& child ){ 
+              children_n.emplace_back( ntk.get_node( child ) );
+              children_s.emplace_back( child );
+              if ( !ntk.is_on_critical_path( ntk.get_node( child ) ) )  return false;
+              if ( !ntk.is_complemented( child ) )
+                return false;                    
+      } );
+      if (children_n.size() != 2) return false;
+      ntk.foreach_fanin( children_n[0], [&]( signal const& grandchild0 ){
+        ntk.foreach_fanin( children_n[1], [&]( signal const& grandchild1){ 
+          if ( ( grandchild0 == grandchild1 ) && ntk.is_on_critical_path( ntk.get_node( grandchild0 ) ) ){
+             found = true;
+             shared_child = grandchild0;
+          }      
+        } );
+      } );
+      if ( found ){
+        ntk.foreach_fanin( children_n[0], [&]( signal const& grandchild0 ){
+          if ( ( grandchild0 != shared_child ) && !ntk.is_on_critical_path( ntk.get_node( grandchild0 ) ) ){
+            others.emplace_back( grandchild0 );
+          }
+        } );
+        ntk.foreach_fanin( children_n[1], [&]( signal const& grandchild1 ){
+           if ( ( grandchild1 != shared_child ) && !ntk.is_on_critical_path( ntk.get_node( grandchild1 ) ) ){
+             others.emplace_back( grandchild1 );
+           }
+        } );
+        if ( others.size() != 2 )
+          return false;
+        else
+        {
+          and_low = !ntk.create_and( !others[0], !others[1] );
+          and_high = ntk.create_and( and_low, shared_child );
+          ntk.substitute_node( n, !and_high );
+          return true;
+        }
+      }
+      else
+        return false;
+          
+    }
+    else
+      return false;
+
+      
+  }
+
+  bool try_distributivity_and(node n) {
+    if ( ntk.is_on_critical_path( n ) )
+    {
+      std::vector<node> children_n;
+      std::vector<signal> others, children_s;
+      signal and_low, and_high, shared_child;
+      bool found = false;
+      ntk.foreach_fanin( n, [&]( signal const& child )
+                         {
+                           children_n.emplace_back( ntk.get_node( child ) );
+                           children_s.emplace_back( child );
+                           if ( !ntk.is_on_critical_path( ntk.get_node( child ) ) )
+                             return false;
+                           if ( ntk.is_complemented( child ) )
+                             return false;
+                         } );
+      if ( children_n.size() != 2 )
+        return false;
+      ntk.foreach_fanin( children_n[0], [&]( signal const& grandchild0 )
+                         {
+                           ntk.foreach_fanin( children_n[1], [&]( signal const& grandchild1 )
+                                              {
+                                                if ( ( grandchild0 == grandchild1 ) && ntk.is_on_critical_path( ntk.get_node( grandchild0 ) ) )
+                                                {
+                                                  found = true;
+                                                  shared_child = grandchild0;
+                                                }
+                                              } );
+                         } );
+      if ( found )
+      {
+        ntk.foreach_fanin( children_n[0], [&]( signal const& grandchild0 )
+                           {
+                             if ( ( grandchild0 != shared_child ) && !ntk.is_on_critical_path( ntk.get_node( grandchild0 ) ) )
+                             {
+                               others.emplace_back( grandchild0 );
+                             }
+                           } );
+        ntk.foreach_fanin( children_n[1], [&]( signal const& grandchild1 )
+                           {
+                             if ( ( grandchild1 != shared_child ) && !ntk.is_on_critical_path( ntk.get_node( grandchild1 ) ) )
+                             {
+                               others.emplace_back( grandchild1 );
+                             }
+                           } );
+        if ( others.size() != 2 )
+          return false;
+        else
+        {
+          and_low = ntk.create_and( others[0], others[1] );
+          and_high = ntk.create_and( and_low, shared_child );
+          ntk.substitute_node( n, and_high );
+          return true;
+        }
+      }
+      else
+        return false;
+    }
+    else
+      return false;
+
+
+  }
+  bool try_TL_distributivity(node n)
+  {
+    if (ntk.is_on_critical_path( n ))
+      {
+        std::vector<node> children_n, grandchildren_n;
+        std::vector<signal> grandchildren_s, children_s, grandgrandchildren;
+        signal and_middle, and_up, and_left, and_right;
+        ntk.foreach_fanin( n, [&]( signal const& child )
+                           {
+                             children_n.emplace_back( ntk.get_node( child ) );
+                             children_s.emplace_back( child );
+                           } );
+        if ( children_s.size() != 2 )
+          return false;
+        if ( ntk.level( children_n[0] ) > ntk.level( children_n[1] ) )
+        {
+          std::swap( children_s[0], children_s[1] );
+          std::swap( children_n[0], children_n[1] );
+        } //have child 1 be on crit path
+        if ( ntk.level( children_n[0] ) == ntk.level( children_n[1] ) )
+          return false; //can't do anything if both on critical path
+        if ( ntk.is_complemented( children_s[1] ) )
+        {
+          ntk.foreach_fanin( children_n[1], [&]( signal const& grandchild )
+                             {
+                               grandchildren_s.emplace_back( grandchild );
+                               grandchildren_n.emplace_back( ntk.get_node( grandchild ) );
+                             } );
+          if ( grandchildren_s.size() != 2 )
+            return false;
+          if ( ntk.level( grandchildren_n[0] ) > ntk.level( grandchildren_n[1] ) )
+          {
+            std::swap( grandchildren_n[0], grandchildren_n[1] );
+            std::swap( grandchildren_s[0], grandchildren_s[1] );
+          }
+          if ( !ntk.is_complemented( grandchildren_s[1] ) )
+            return false;
+          if ( ntk.level( grandchildren_n[0] ) == ntk.level( grandchildren_n[1] ) )
+            return false;
+          ntk.foreach_fanin( grandchildren_n[1], [&]( signal const& grandgrandchild ){   
+              grandgrandchildren.emplace_back( grandgrandchild ); 
+          } );
+          //if ( grandgrandchildren.size() != 2 )
+           // return false;
+          if ( ntk.level( ntk.get_node( grandgrandchildren[0] ) ) > ntk.level( ntk.get_node( grandgrandchildren[1] ) ) )
+          {
+            std::swap( grandgrandchildren[0], grandgrandchildren[1] );
+          }
+          if ( ntk.level( ntk.get_node( grandgrandchildren[0] ) ) == ntk.level( ntk.get_node( grandgrandchildren[1] ) ) )
+            return false;
+          if ( ntk.level( ntk.get_node( grandgrandchildren[1] ) ) <= ntk.level( children_n[0] ) )
+            return false;
+          and_left = ntk.create_and( grandgrandchildren[0], children_s[0] );
+          and_right = ntk.create_and( !grandchildren_s[0], children_s[0] );
+          and_middle = ntk.create_and( and_left, grandgrandchildren[1] );
+          and_up = ntk.create_or( and_middle, and_right );
+          ntk.substitute_node( n, and_up );
+          return true;
+        }
+        else
+          return false;
+      }
+    else
+      return false;
   }
 
 private:
