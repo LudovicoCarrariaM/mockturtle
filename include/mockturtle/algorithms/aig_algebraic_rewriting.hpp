@@ -253,46 +253,53 @@ private:
         } //have child 1 be on crit path
         if ( ntk.level( children_n[0] ) == ntk.level( children_n[1] ) )
           return false; //can't do anything if both on critical path
-        if ( ntk.is_complemented( children_s[1] ) )
-        {
-          ntk.foreach_fanin( children_n[1], [&]( signal const& grandchild )
+        if ( !ntk.is_complemented( children_s[1] ) )
+          return false;
+        if ( ntk.is_on_critical_path( children_n[0] ) )
+          return false;
+        
+        ntk.foreach_fanin( children_n[1], [&]( signal const& grandchild )
                              {
                                grandchildren_s.emplace_back( grandchild );
                                grandchildren_n.emplace_back( ntk.get_node( grandchild ) );
                              } );
-          if ( grandchildren_s.size() != 2 )
+        if ( grandchildren_s.size() != 2 )
             return false;
-          if ( ntk.level( grandchildren_n[0] ) > ntk.level( grandchildren_n[1] ) )
+        
+        if ( ntk.level( grandchildren_n[0] ) > ntk.level( grandchildren_n[1] ) )
           {
             std::swap( grandchildren_n[0], grandchildren_n[1] );
             std::swap( grandchildren_s[0], grandchildren_s[1] );
           }
-          if ( !ntk.is_complemented( grandchildren_s[1] ) )
+        if ( !ntk.is_complemented( grandchildren_s[1] ) )
             return false;
-          if ( ntk.level( grandchildren_n[0] ) == ntk.level( grandchildren_n[1] ) )
+        if ( ntk.level( grandchildren_n[0] ) == ntk.level( grandchildren_n[1] ) )
             return false;
-          ntk.foreach_fanin( grandchildren_n[1], [&]( signal const& grandgrandchild ){   
+        if ( ntk.is_on_critical_path( grandchildren_n[0] ) )
+          return false;
+
+        ntk.foreach_fanin( grandchildren_n[1], [&]( signal const& grandgrandchild ){   
               grandgrandchildren.emplace_back( grandgrandchild ); 
           } );
-          //if ( grandgrandchildren.size() != 2 )
-           // return false;
-          if ( ntk.level( ntk.get_node( grandgrandchildren[0] ) ) > ntk.level( ntk.get_node( grandgrandchildren[1] ) ) )
+
+        if ( grandgrandchildren.size() != 2 )
+            return false;
+        if ( ntk.level( ntk.get_node( grandgrandchildren[0] ) ) > ntk.level( ntk.get_node( grandgrandchildren[1] ) ) )
           {
             std::swap( grandgrandchildren[0], grandgrandchildren[1] );
           }
-          if ( ntk.level( ntk.get_node( grandgrandchildren[0] ) ) == ntk.level( ntk.get_node( grandgrandchildren[1] ) ) )
+        if ( ntk.level( ntk.get_node( grandgrandchildren[0] ) ) == ntk.level( ntk.get_node( grandgrandchildren[1] ) ) )
             return false;
-          if ( ntk.level( ntk.get_node( grandgrandchildren[1] ) ) <= ntk.level( children_n[0] ) )
-            return false;
-          and_left = ntk.create_and( grandgrandchildren[0], children_s[0] );
-          and_right = ntk.create_and( !grandchildren_s[0], children_s[0] );
-          and_middle = ntk.create_and( and_left, grandgrandchildren[1] );
-          and_up = ntk.create_or( and_middle, and_right );
-          ntk.substitute_node( n, and_up );
-          return true;
-        }
-        else
+        if ( ntk.is_on_critical_path( ntk.get_node( grandgrandchildren[0] ) ) )
           return false;
+        if ( ntk.level( ntk.get_node( grandgrandchildren[1] ) ) <= ntk.level( children_n[0] ) )
+            return false;
+        and_left = ntk.create_and( grandgrandchildren[0], children_s[0] );
+        and_right = !ntk.create_and( !grandchildren_s[0], children_s[0] );
+        and_middle = !ntk.create_and( and_left, grandgrandchildren[1] );
+        and_up = !ntk.create_and( and_middle, and_right );
+        ntk.substitute_node( n, and_up );
+        return true;
       }
     else
       return false;
