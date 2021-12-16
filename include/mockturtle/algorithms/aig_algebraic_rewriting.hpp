@@ -121,15 +121,30 @@ private:
       std::vector<node> children_n;
       std::vector<signal> others, children_s;
       signal and_low, and_high, shared_child;
-      bool found=false;
-      ntk.foreach_fanin( n, [&]( signal const& child ){ 
-              children_n.emplace_back( ntk.get_node( child ) );
-              children_s.emplace_back( child );
-              if ( !ntk.is_on_critical_path( ntk.get_node( child ) ) )  return false;
-              if ( !ntk.is_complemented( child ) )
-                return false;                    
-      } );
-      if (children_n.size() != 2) return false;
+      bool found = false;
+      bool crit = true;
+      bool compl = true;
+      ntk.foreach_fanin( n, [&]( signal const& child )
+                         {
+                           children_n.emplace_back( ntk.get_node( child ) );
+                           children_s.emplace_back( child );
+                           if ( !ntk.is_on_critical_path( ntk.get_node( child ) ) )
+                           {
+                             crit= false;
+                           }
+                           if ( !ntk.is_complemented( child ) )
+                           {
+                             compl= false;
+                           }
+                         } );
+      if ( !crit )
+        return false;
+      if ( !compl )
+        return false;
+      if ( children_n.size() != 2 )
+      {
+        return false;
+      }
       ntk.foreach_fanin( children_n[0], [&]( signal const& grandchild0 ){
         ntk.foreach_fanin( children_n[1], [&]( signal const& grandchild1){ 
           if ( ( grandchild0 == grandchild1 ) && ntk.is_on_critical_path( ntk.get_node( grandchild0 ) ) ){
@@ -150,7 +165,9 @@ private:
            }
         } );
         if ( others.size() != 2 )
+        {
           return false;
+        }
         else
         {
           and_low = !ntk.create_and( !others[0], !others[1] );
