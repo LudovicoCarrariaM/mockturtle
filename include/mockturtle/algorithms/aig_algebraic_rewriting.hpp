@@ -122,19 +122,23 @@ private:
       std::vector<signal> others, children_s;
       signal and_low, and_high, shared_child;
       bool found = false;
+      bool crit = false;
+      bool compl = false;
       ntk.foreach_fanin( n, [&]( signal const& child )
                          {
                            children_n.emplace_back( ntk.get_node( child ) );
                            children_s.emplace_back( child );
                            if ( !ntk.is_on_critical_path( ntk.get_node( child ) ) )
                            {
-                             return false;
+                             crit = true;
                            }
                            if ( !ntk.is_complemented( child ) )
                            {
-                             return false;
+                             compl = true;
                            }
                          } );
+      if ( compl || crit )
+        return false;
       
       if ( children_n.size() != 2 )
       {
