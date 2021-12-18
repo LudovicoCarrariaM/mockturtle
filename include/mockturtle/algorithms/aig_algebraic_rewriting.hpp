@@ -140,30 +140,30 @@ private:
       if ( compl || crit )
         return false;
       
-      if ( children_n.size() != 2 )
+      if ( children_n.size() < 2 )
       {
         return false;
       }
-      ntk.foreach_fanin( children_n[0], [&]( signal const& grandchild0 ){
-        ntk.foreach_fanin( children_n[1], [&]( signal const& grandchild1){ 
-          if ( (grandchild0 == grandchild1 ) && ntk.is_on_critical_path( ntk.get_node( grandchild0 ) ) ){
+      ntk.foreach_fanin( children_n[0], [&]( signal const& grandchild2 ){
+        ntk.foreach_fanin( children_n[1], [&]( signal const& grandchild3){ 
+          if ( (grandchild2 == grandchild3 ) && ntk.is_on_critical_path( ntk.get_node( grandchild2 ) ) ){
              found = true;
-             shared_child = grandchild0;
+             shared_child = grandchild2;
           }      
         } );
       } );
       if ( found ){
-        ntk.foreach_fanin( children_n[0], [&]( signal const& grandchild0 ){
-          if ( ( grandchild0 != shared_child ) && !ntk.is_on_critical_path( ntk.get_node( grandchild0 ) ) ){
-            others.emplace_back( grandchild0 );
+        ntk.foreach_fanin( children_n[0], [&]( signal const& grandchild4 ){
+          if ( ( grandchild4 != shared_child ) && !ntk.is_on_critical_path( ntk.get_node( grandchild4 ) ) ){
+            others.emplace_back( grandchild4 );
           }
         } );
-        ntk.foreach_fanin( children_n[1], [&]( signal const& grandchild1 ){
-           if ( ( (grandchild1) != shared_child ) && !ntk.is_on_critical_path( ntk.get_node( grandchild1 ) ) ){
-             others.emplace_back( grandchild1 );
+        ntk.foreach_fanin( children_n[1], [&]( signal const& grandchild5 ){
+           if ( ( (grandchild5) != shared_child ) && !ntk.is_on_critical_path( ntk.get_node( grandchild5 ) ) ){
+             others.emplace_back( grandchild5 );
            }
         } );
-        if ( others.size() != 2 )
+        if ( others.size() < 2 )
         {
           return false;
         }
