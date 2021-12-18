@@ -123,7 +123,7 @@ private:
       signal and_low, and_high, shared_child;
       bool found = false;
       bool crit = false;
-      bool compl = false;
+      bool flag = false;
       ntk.foreach_fanin( n, [&]( signal const& child )
                          {
                            children_n.emplace_back( ntk.get_node( child ) );
@@ -134,10 +134,10 @@ private:
                            }
                            if ( !ntk.is_complemented( child ) )
                            {
-                             compl = true;
+                             flag = true;
                            }
                          } );
-      if ( compl || crit )
+      if ( flag || crit )
         return false;
       
       if ( children_n.size() < 2 )
